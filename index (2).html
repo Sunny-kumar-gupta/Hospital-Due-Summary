@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Referral Hospital Due Summary</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --ink:#1c2b2d;
+    --paper:#f6f4ee;
+    --panel:#ffffff;
+    --line:#dcd7c9;
+    --teal:#0f5d52;
+    --teal-dark:#0a3f38;
+    --clay:#b5542a;
+    --due:#a3352b;
+    --due-bg:#fbe9e6;
+    --paid:#1f7a4d;
+    --paid-bg:#e7f4ec;
+    --mono: 'JetBrains Mono', 'Courier New', monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Georgia', 'Iowan Old Style', serif;
+    min-height:100vh;
+  }
+  .wrap{
+    max-width:1000px;
+    margin:0 auto;
+    padding:48px 24px 80px;
+  }
+  header{
+    border-bottom:3px solid var(--ink);
+    padding-bottom:20px;
+    margin-bottom:32px;
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-end;
+    gap:16px;
+    flex-wrap:wrap;
+  }
+  .eyebrow{
+    font-family:var(--mono);
+    text-transform:uppercase;
+    letter-spacing:.14em;
+    font-size:11px;
+    color:var(--teal);
+    margin:0 0 6px;
+  }
+  h1{
+    font-size:clamp(28px,4vw,42px);
+    margin:0;
+    line-height:1.05;
+    letter-spacing:-.01em;
+  }
+  .sub{
+    font-family:var(--mono);
+    font-size:12px;
+    color:#5b6a63;
+    text-align:right;
+  }
+
+  .upload-zone{
+    background:var(--panel);
+    border:2px dashed var(--line);
+    border-radius:2px;
+    padding:36px 24px;
+    text-align:center;
+    cursor:pointer;
+    transition:border-color .15s ease, background .15s ease;
+    position:relative;
+  }
+  .upload-zone:hover, .upload-zone.drag{
+    border-color:var(--teal);
+    background:#fbfaf6;
+  }
+  .upload-zone input{
+    position:absolute;
+    inset:0;
+    opacity:0;
+    cursor:pointer;
+  }
+  .upload-icon{
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:.1em;
+    color:var(--teal);
+    text-transform:uppercase;
+    display:block;
+    margin-bottom:10px;
+  }
+  .upload-title{
+    font-size:19px;
+    margin:0 0 4px;
+  }
+  .upload-hint{
+    font-family:var(--mono);
+    font-size:12px;
+    color:#8a8878;
+    margin:0;
+  }
+  .filename-tag{
+    display:inline-block;
+    margin-top:14px;
+    font-family:var(--mono);
+    font-size:12px;
+    background:var(--teal);
+    color:#fff;
+    padding:5px 12px;
+    border-radius:2px;
+  }
+
+  #status{
+    font-family:var(--mono);
+    font-size:12.5px;
+    margin-top:14px;
+    min-height:18px;
+  }
+  #status.error{ color:var(--due); }
+  #status.ok{ color:var(--paid); }
+
+  .results{ display:none; margin-top:44px; }
+  .results.show{ display:block; }
+
+  .stat-row{
+    display:grid;
+    grid-template-columns:repeat(4,1fr);
+    gap:1px;
+    background:var(--line);
+    border:1px solid var(--line);
+    margin-bottom:2px;
+  }
+  .stat{
+    background:var(--panel);
+    padding:18px 16px;
+  }
+  .stat .label{
+    font-family:var(--mono);
+    font-size:10.5px;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    color:#8a8878;
+    margin-bottom:8px;
+  }
+  .stat .value{
+    font-size:26px;
+    font-variant-numeric:tabular-nums;
+    letter-spacing:-.01em;
+  }
+  .stat.due .value{ color:var(--due); }
+  .stat.paid .value{ color:var(--paid); }
+
+  table{
+    width:100%;
+    border-collapse:collapse;
+    margin-top:28px;
+    background:var(--panel);
+  }
+  caption{
+    text-align:left;
+    font-size:13px;
+    font-family:var(--mono);
+    color:#5b6a63;
+    padding-bottom:10px;
+  }
+  thead th{
+    text-align:left;
+    font-family:var(--mono);
+    font-size:10.5px;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    color:#fff;
+    background:var(--teal-dark);
+    padding:11px 14px;
+    position:sticky;
+    top:0;
+  }
+  thead th.num{ text-align:right; }
+  tbody td{
+    padding:11px 14px;
+    border-bottom:1px solid var(--line);
+    font-variant-numeric:tabular-nums;
+    font-size:14.5px;
+  }
+  tbody td.num{ text-align:right; font-family:var(--mono); font-size:13.5px; }
+  tbody tr:hover td{ background:#fbfaf3; }
+  tbody tr.zero-due td.due{ color:#9aa39c; }
+  td.due{ color:var(--due); font-weight:700; }
+  td.name{ font-weight:600; }
+  tbody tr:last-child td{ border-bottom:2px solid var(--ink); }
+
+  tfoot td{
+    padding:13px 14px;
+    font-family:var(--mono);
+    font-weight:700;
+    font-size:13.5px;
+    border-top:2px solid var(--ink);
+    background:#efece2;
+  }
+  tfoot td.num{ text-align:right; }
+  tfoot td.due{ color:var(--due); }
+
+  th.sortable{ cursor:pointer; user-select:none; }
+  th.sortable:after{ content:'  ↕'; opacity:.5; font-size:9px; }
+  th.sortable.active:after{ content:'  ↓'; opacity:1; }
+  th.sortable.active.asc:after{ content:'  ↑'; }
+
+  .actions{
+    display:flex;
+    gap:10px;
+    margin-top:24px;
+    flex-wrap:wrap;
+  }
+  button.dl{
+    font-family:var(--mono);
+    font-size:12px;
+    letter-spacing:.05em;
+    text-transform:uppercase;
+    background:var(--ink);
+    color:#fff;
+    border:none;
+    padding:11px 18px;
+    border-radius:2px;
+    cursor:pointer;
+    transition:background .15s ease;
+  }
+  button.dl:hover{ background:var(--teal-dark); }
+  button.dl.secondary{
+    background:transparent;
+    color:var(--ink);
+    border:1px solid var(--ink);
+  }
+  button.dl.secondary:hover{ background:var(--ink); color:#fff; }
+
+  .footnote{
+    font-family:var(--mono);
+    font-size:11.5px;
+    color:#8a8878;
+    margin-top:18px;
+    line-height:1.6;
+  }
+
+  @media (max-width:640px){
+    .stat-row{ grid-template-columns:repeat(2,1fr); }
+    thead th, tbody td{ padding:9px 8px; font-size:12.5px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <p class="eyebrow">Lab Billing / Accounts Receivable</p>
+      <h1>Referral Hospital Due Summary</h1>
+    </div>
+    <div class="sub" id="dateStamp"></div>
+  </header>
+
+  <label class="upload-zone" id="dropZone">
+    <input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
+    <span class="upload-icon">Step 01</span>
+    <p class="upload-title">Drop your billing Excel file here, or click to browse</p>
+    <p class="upload-hint">.xlsx / .xls — expects columns: Referral Hospital, Amount, Discount, Paid, Due, Net Amount</p>
+    <div id="fileTag"></div>
+  </label>
+  <div id="status"></div>
+
+  <div class="results" id="results">
+    <div class="stat-row" id="statRow"></div>
+
+    <table id="summaryTable">
+      <caption>Grouped by referral hospital / doctor — click a column header to sort</caption>
+      <thead>
+        <tr>
+          <th class="sortable" data-key="name">Referral Hospital</th>
+          <th class="sortable num" data-key="patients">Patients</th>
+          <th class="sortable num" data-key="amount">Amount</th>
+          <th class="sortable num" data-key="discount">Discount</th>
+          <th class="sortable num" data-key="paid">Paid</th>
+          <th class="sortable num active" data-key="due">Due</th>
+          <th class="sortable num" data-key="net">Net Amount</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+      <tfoot id="tfoot"></tfoot>
+    </table>
+
+    <div class="actions">
+      <button class="dl" id="downloadXlsx">Download as Excel</button>
+      <button class="dl secondary" id="downloadCsv">Download as CSV</button>
+    </div>
+
+    <p class="footnote" id="footnote"></p>
+  </div>
+
+</div>
+
+<script>
+document.getElementById('dateStamp').textContent = new Date().toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' });
+
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+const statusEl = document.getElementById('status');
+const results = document.getElementById('results');
+const fileTag = document.getElementById('fileTag');
+
+let currentRows = []; // aggregated rows
+let sortKey = 'due';
+let sortAsc = false;
+
+['dragenter','dragover'].forEach(evt=>{
+  dropZone.addEventListener(evt, e=>{ e.preventDefault(); dropZone.classList.add('drag'); });
+});
+['dragleave','drop'].forEach(evt=>{
+  dropZone.addEventListener(evt, e=>{ e.preventDefault(); dropZone.classList.remove('drag'); });
+});
+dropZone.addEventListener('drop', e=>{
+  const f = e.dataTransfer.files[0];
+  if(f){ fileInput.files = e.dataTransfer.files; handleFile(f); }
+});
+fileInput.addEventListener('change', e=>{
+  const f = e.target.files[0];
+  if(f) handleFile(f);
+});
+
+function setStatus(msg, type){
+  statusEl.textContent = msg;
+  statusEl.className = type || '';
+}
+
+function findKey(row, candidates){
+  const keys = Object.keys(row);
+  for(const cand of candidates){
+    const hit = keys.find(k => k.trim().toLowerCase() === cand.toLowerCase());
+    if(hit) return hit;
+  }
+  // fallback: partial match
+  for(const cand of candidates){
+    const hit = keys.find(k => k.trim().toLowerCase().includes(cand.toLowerCase()));
+    if(hit) return hit;
+  }
+  return null;
+}
+
+function num(v){
+  if(v === undefined || v === null || v === '') return 0;
+  const n = parseFloat(String(v).replace(/,/g,''));
+  return isNaN(n) ? 0 : n;
+}
+
+function handleFile(file){
+  fileTag.innerHTML = `<span class="filename-tag">${file.name}</span>`;
+  setStatus('Reading file…');
+  results.classList.remove('show');
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try{
+      const data = new Uint8Array(e.target.result);
+      const wb = XLSX.read(data, { type:'array' });
+      const sheetName = wb.SheetNames[0];
+      const sheet = wb.Sheets[sheetName];
+      const json = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+      if(!json.length){ setStatus('No rows found in the first sheet.', 'error'); return; }
+
+      const refKey = findKey(json[0], ['Referral Hospital','Referral','Doctor','Hospital']);
+      const amtKey = findKey(json[0], ['Amount']);
+      const discKey = findKey(json[0], ['Discount']);
+      const paidKey = findKey(json[0], ['Paid']);
+      const dueKey = findKey(json[0], ['Due']);
+      const netKey = findKey(json[0], ['Net Amount','Net']);
+      const idKey = findKey(json[0], ['Patient ID','PatientID','Bill No']);
+
+      if(!refKey){
+        setStatus('Could not find a "Referral Hospital" column in this file.', 'error');
+        return;
+      }
+
+      // forward-fill referral hospital, drop subtotal "Total" rows
+      let lastRef = null;
+      const cleaned = [];
+      for(const row of json){
+        let ref = row[refKey];
+        if(ref === '' || ref === undefined || ref === null){
+          ref = lastRef;
+        } else {
+          lastRef = ref;
+        }
+        const refStr = String(ref || '').trim();
+        if(!refStr || refStr.toLowerCase() === 'total') continue;
+        cleaned.push({
+          ref: refStr,
+          amount: num(row[amtKey]),
+          discount: num(row[discKey]),
+          paid: num(row[paidKey]),
+          due: num(row[dueKey]),
+          net: netKey ? num(row[netKey]) : num(row[amtKey]) - num(row[discKey]) - num(row[paidKey]),
+          hasId: idKey ? (row[idKey] !== '' && row[idKey] !== undefined) : true
+        });
+      }
+
+      if(!cleaned.length){
+        setStatus('No usable data rows found after cleaning.', 'error');
+        return;
+      }
+
+      const groups = {};
+      for(const r of cleaned){
+        if(!groups[r.ref]) groups[r.ref] = { name:r.ref, patients:0, amount:0, discount:0, paid:0, due:0, net:0 };
+        const g = groups[r.ref];
+        g.patients += r.hasId ? 1 : 0;
+        g.amount += r.amount;
+        g.discount += r.discount;
+        g.paid += r.paid;
+        g.due += r.due;
+        g.net += r.net;
+      }
+
+      currentRows = Object.values(groups);
+      sortKey = 'due'; sortAsc = false;
+      render();
+      setStatus(`Loaded ${cleaned.length} billing rows across ${currentRows.length} referral hospitals from "${file.name}".`, 'ok');
+      results.classList.add('show');
+    }catch(err){
+      console.error(err);
+      setStatus('Could not read that file. Please upload a valid .xlsx/.xls export.', 'error');
+    }
+  };
+  reader.onerror = () => setStatus('Failed to read the file.', 'error');
+  reader.readAsArrayBuffer(file);
+}
+
+function fmt(n){
+  return Math.round(n).toLocaleString('en-IN');
+}
+
+function render(){
+  const sorted = [...currentRows].sort((a,b)=>{
+    let av = a[sortKey], bv = b[sortKey];
+    if(typeof av === 'string'){ av = av.toLowerCase(); bv = bv.toLowerCase(); }
+    if(av < bv) return sortAsc ? -1 : 1;
+    if(av > bv) return sortAsc ? 1 : -1;
+    return 0;
+  });
+
+  // stat row
+  const totals = currentRows.reduce((acc,r)=>{
+    acc.patients += r.patients; acc.amount += r.amount; acc.discount += r.discount;
+    acc.paid += r.paid; acc.due += r.due; acc.net += r.net;
+    return acc;
+  }, {patients:0,amount:0,discount:0,paid:0,due:0,net:0});
+
+  document.getElementById('statRow').innerHTML = `
+    <div class="stat"><div class="label">Referral Hospitals</div><div class="value">${currentRows.length}</div></div>
+    <div class="stat"><div class="label">Total Billed</div><div class="value">₹${fmt(totals.amount)}</div></div>
+    <div class="stat paid"><div class="label">Total Paid</div><div class="value">₹${fmt(totals.paid)}</div></div>
+    <div class="stat due"><div class="label">Total Due</div><div class="value">₹${fmt(totals.due)}</div></div>
+  `;
+
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML = sorted.map(r => `
+    <tr class="${r.due === 0 ? 'zero-due' : ''}">
+      <td class="name">${escapeHtml(r.name)}</td>
+      <td class="num">${r.patients}</td>
+      <td class="num">${fmt(r.amount)}</td>
+      <td class="num">${fmt(r.discount)}</td>
+      <td class="num">${fmt(r.paid)}</td>
+      <td class="num due">${fmt(r.due)}</td>
+      <td class="num">${fmt(r.net)}</td>
+    </tr>
+  `).join('');
+
+  document.getElementById('tfoot').innerHTML = `
+    <tr>
+      <td>Grand Total</td>
+      <td class="num">${totals.patients}</td>
+      <td class="num">${fmt(totals.amount)}</td>
+      <td class="num">${fmt(totals.discount)}</td>
+      <td class="num">${fmt(totals.paid)}</td>
+      <td class="num due">${fmt(totals.due)}</td>
+      <td class="num">${fmt(totals.net)}</td>
+    </tr>
+  `;
+
+  document.querySelectorAll('th.sortable').forEach(th=>{
+    th.classList.toggle('active', th.dataset.key === sortKey);
+    th.classList.toggle('asc', th.dataset.key === sortKey && sortAsc);
+  });
+
+  document.getElementById('footnote').textContent =
+    `Rows without a referral hospital name are grouped under the last labeled entry above them, matching the source file's layout. Recalculate by uploading a new file above.`;
+}
+
+document.querySelectorAll('th.sortable').forEach(th=>{
+  th.addEventListener('click', ()=>{
+    const key = th.dataset.key;
+    if(sortKey === key){ sortAsc = !sortAsc; }
+    else { sortKey = key; sortAsc = key === 'name'; }
+    render();
+  });
+});
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+document.getElementById('downloadCsv').addEventListener('click', ()=>{
+  if(!currentRows.length) return;
+  const header = ['Referral Hospital','Patients','Amount','Discount','Paid','Due','Net Amount'];
+  const rows = [...currentRows].sort((a,b)=> b.due - a.due);
+  const lines = [header.join(',')];
+  for(const r of rows){
+    lines.push([`"${r.name.replace(/"/g,'""')}"`, r.patients, r.amount, r.discount, r.paid, r.due, r.net].join(','));
+  }
+  downloadBlob(lines.join('\n'), 'referral_hospital_due_summary.csv', 'text/csv');
+});
+
+document.getElementById('downloadXlsx').addEventListener('click', ()=>{
+  if(!currentRows.length) return;
+  const rows = [...currentRows].sort((a,b)=> b.due - a.due).map(r => ({
+    'Referral Hospital': r.name,
+    'Patients': r.patients,
+    'Amount': r.amount,
+    'Discount': r.discount,
+    'Paid': r.paid,
+    'Due': r.due,
+    'Net Amount': r.net
+  }));
+  const totals = currentRows.reduce((acc,r)=>{
+    acc.patients += r.patients; acc.amount += r.amount; acc.discount += r.discount;
+    acc.paid += r.paid; acc.due += r.due; acc.net += r.net;
+    return acc;
+  }, {patients:0,amount:0,discount:0,paid:0,due:0,net:0});
+  rows.push({
+    'Referral Hospital': 'Grand Total',
+    'Patients': totals.patients, 'Amount': totals.amount, 'Discount': totals.discount,
+    'Paid': totals.paid, 'Due': totals.due, 'Net Amount': totals.net
+  });
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [{wch:32},{wch:10},{wch:12},{wch:12},{wch:12},{wch:12},{wch:12}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Referral Hospital Due Summary');
+  XLSX.writeFile(wb, 'referral_hospital_due_summary.xlsx');
+});
+
+function downloadBlob(content, filename, mime){
+  const blob = new Blob([content], {type: mime});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+</script>
+</body>
+</html>
